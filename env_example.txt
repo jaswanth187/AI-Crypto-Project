@@ -1,0 +1,23 @@
+# Binance API Configuration
+BINANCE_API_KEY=your_binance_api_key_here
+BINANCE_SECRET_KEY=your_binance_secret_key_here
+BINANCE_TESTNET=True
+
+# CryptoPanic API (Optional - for news sentiment)
+CRYPTOPANIC_API_KEY=your_cryptopanic_api_key_here
+
+# Twitter API (Optional - for social sentiment)
+TWITTER_BEARER_TOKEN=your_twitter_bearer_token_here
+
+# Model Configuration
+MODEL_TYPE=xgboost
+PREDICTION_HORIZON=24
+CONFIDENCE_THRESHOLD=0.7
+
+# Data Configuration
+DEFAULT_SYMBOL=BTCUSDT
+TIMEFRAME=1h
+LOOKBACK_PERIOD=1000
+
+# Sentiment Analysis
+SENTIMENT_LOOKBACK_HOURS=24
