@@ -142,19 +142,17 @@ class CryptoTradingAssistant:
         try:
             logger.info("Preparing features for prediction")
             
-            # Engineer all features
+            # Engineer all features (without selection/scaling for prediction)
             engineered_data = self.feature_engineer.engineer_all_features(
                 market_data, sentiment_data
             )
             
-            # Select most important features
-            selected_data = self.feature_engineer.select_features(engineered_data, k=50)
+            # For prediction, we need to match the exact features the model was trained on
+            # Don't apply feature selection or scaling during prediction
+            # The model expects the full feature set as it was trained
             
-            # Scale features
-            scaled_data = self.feature_engineer.scale_features(selected_data)
-            
-            logger.info(f"Features prepared: {scaled_data.shape}")
-            return scaled_data
+            logger.info(f"Features prepared: {engineered_data.shape}")
+            return engineered_data
             
         except Exception as e:
             logger.error(f"Error preparing features: {e}")
@@ -182,10 +180,10 @@ class CryptoTradingAssistant:
                 market_data, _ = self.collect_market_data(hours_back=1000)  # ~6 weeks
                 sentiment_data = self.collect_sentiment_data(hours_back=168)
                 
-                # Prepare features
+                # Prepare features (engineer all features without selection/scaling)
                 df = self.prepare_features(market_data, sentiment_data)
             
-            # Train models
+            # Train models on the full feature set
             results = self.ml_model.train_models(df, test_size=0.2)
             
             # Save models

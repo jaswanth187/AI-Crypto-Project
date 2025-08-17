@@ -308,6 +308,10 @@ class CryptoMLModel:
             # Select only the expected features in the correct order
             X = features_df[expected_features]
             
+            # Convert to numpy array if it's a DataFrame
+            if hasattr(X, 'values'):
+                X = X.values
+            
             # Make predictions
             classification_pred = self.classification_model.predict(X)
             regression_pred = self.regression_model.predict(X)
