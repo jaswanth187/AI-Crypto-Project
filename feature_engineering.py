@@ -186,7 +186,6 @@ class FeatureEngineer:
                 # Add default sentiment features with neutral values
                 df['sentiment_score'] = 0.0
                 df['cryptopanic_sentiment'] = 0.0
-                df['twitter_sentiment'] = 0.0
                 df['fear_greed_score'] = 0.5
                 df['sentiment_momentum'] = 0.0
                 df['sentiment_ma'] = 0.0
@@ -195,7 +194,6 @@ class FeatureEngineer:
                 # Add sentiment scores as features
                 df['sentiment_score'] = sentiment_data.get('combined_sentiment_score', 0)
                 df['cryptopanic_sentiment'] = sentiment_data.get('cryptopanic', {}).get('sentiment_score', 0)
-                df['twitter_sentiment'] = sentiment_data.get('twitter', {}).get('engagement_sentiment', 0)
                 df['fear_greed_score'] = sentiment_data.get('fear_greed', {}).get('value', 50) / 100
                 
                 # Create sentiment momentum features

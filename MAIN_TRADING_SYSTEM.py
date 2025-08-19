@@ -14,71 +14,65 @@ def main_menu():
     print("\n" + "=" * 70)
     print(" CRYPTO AI TRADING ASSISTANT - MAIN SYSTEM")
     print("=" * 70)
-    print("1. Generate Trading Signal (Conservative)")
-    print("2. Generate Trading Signal (Aggressive)")
-    print("3. Retrain Model with Latest Data")
-    print("4. Show Market Analysis")
-    print("5. Backtest Model")
-    print("6. Continuous Monitoring")
-    print("7. Exit")
+    print("1. Generate Trading Signal")
+    print("2. Retrain Model with Latest Data")
+    print("3. Show Market Analysis")
+    print("4. Backtest Model")
+    print("5. Continuous Monitoring")
+    print("6. Exit")
     print("=" * 70)
 
-def generate_conservative_signal():
-    """Generate conservative trading signal"""
-    print("\n Generating Conservative Trading Signal...")
+
+def generate_trading_signal():
+    """Generate a trading signal based on the model's prediction and confidence."""
+    print("\n Generating Trading Signal...")
     print("=" * 50)
-    
+
     try:
         assistant = CryptoTradingAssistant('BTCUSDT', 'xgboost')
-        
-        # Check if models are loaded
+
         if not hasattr(assistant.ml_model, 'training_history') or not assistant.ml_model.training_history:
             print(" No trained models found!")
-            print("   Please choose option 3 to train models first")
+            print("   Please choose option 2 to train models first")
             return
-        
-        # Collect market data
+
         market_data, market_info = assistant.collect_market_data(hours_back=168)
         sentiment_data = assistant.collect_sentiment_data(hours_back=24)
-        
-        # Prepare features
+
         features = assistant.prepare_features(market_data, sentiment_data)
         latest_features = features.iloc[-1:][assistant.ml_model.training_history['feature_names']]
-        
-        # Make prediction
+
         prediction = assistant.ml_model.predict(latest_features)
-        
-        # Extract results
+
         direction = prediction['classification'][0]
         confidence = prediction['confidence'][0]
         price_change_pred = prediction['regression'][0]
-        
-        # Generate signal with more realistic confidence thresholds
-        if confidence < 0.6:
-            signal = "HOLD"
-            reasoning = f"Low confidence ({confidence:.1%}) - insufficient signal strength"
-        else:
-            if direction == 2:
+
+        if direction == 2:
+            signal = "BUY"
+            reasoning = "AI model predicts upward price movement."
+        elif direction == 0:
+            signal = "SELL"
+            reasoning = "AI model predicts downward price movement."
+        else: # direction == 1 (HOLD)
+            # If the model is not confident in direction, use regression to decide.
+            if price_change_pred > 0.0005: # Add a small threshold to avoid noise
                 signal = "BUY"
-                reasoning = "AI model predicts upward price movement"
-            elif direction == 0:
+                reasoning = "Directional model is neutral, but regression predicts upward movement."
+            elif price_change_pred < -0.0005:
                 signal = "SELL"
-                reasoning = "AI model predicts downward price movement"
+                reasoning = "Directional model is neutral, but regression predicts downward movement."
             else:
                 signal = "HOLD"
-                reasoning = "AI model predicts neutral market conditions"
-        
-        # Calculate risk levels based on regression prediction
+                reasoning = "Both directional and regression models show no clear signal."
+
+
         current_price = market_info['current_price']
-        
+
         if signal != "HOLD":
-            # Use regression prediction for Target Price
             target_price = current_price * (1 + price_change_pred)
-            
-            # Use a 2:1 Reward/Risk ratio for Stop Loss
             reward = abs(target_price - current_price)
             risk = reward / 2
-            
             if signal == "BUY":
                 stop_loss = current_price - risk
             else: # SELL
@@ -88,8 +82,8 @@ def generate_conservative_signal():
             atr = market_data['atr'].iloc[-1]
             target_price = current_price + (1.0 * atr)  # Potential upside
             stop_loss = current_price - (1.0 * atr)     # Potential downside
-        
-        # Display results
+
+
         print(f"\n TRADING SIGNAL:")
         print(f" Symbol: BTCUSDT")
         print(f" Signal: {signal}")
@@ -98,121 +92,14 @@ def generate_conservative_signal():
         print(f" Target Price: ${target_price:,.2f}")
         print(f" Stop Loss: ${stop_loss:,.2f}")
         print(f" Reasoning: {reasoning}")
-        print(f" Regression Pred: {price_change_pred:.2%}")
-        
-        print(f"\n Market Context:")
-        print(f"   24h Change: {market_info['price_change_24h']:.2f}%")
-        print(f"   Volume: {market_info['volume_24h']:,.0f}")
-        print(f"   RSI: {market_data['rsi'].iloc[-1]:.1f}")
-        print(f"   MACD: {market_data['macd'].iloc[-1]:.4f}")
-        
-    except Exception as e:
-        print(f" Error: {e}")
+        print(f" Predicted Change: {price_change_pred:.2%}")
 
-def generate_aggressive_signal():
-    """Generate aggressive trading signal that forces decisions"""
-    print("\n Generating Aggressive Trading Signal...")
-    print("=" * 50)
-    
-    try:
-        assistant = CryptoTradingAssistant('BTCUSDT', 'xgboost')
-        
-        # Check if models are loaded
-        if not hasattr(assistant.ml_model, 'training_history') or not assistant.ml_model.training_history:
-            print(" No trained models found!")
-            print("   Please choose option 3 to train models first")
-            return
-        
-        # Collect market data
-        market_data, market_info = assistant.collect_market_data(hours_back=168)
-        sentiment_data = assistant.collect_sentiment_data(hours_back=24)
-        
-        # Prepare features
-        features = assistant.prepare_features(market_data, sentiment_data)
-        latest_features = features.iloc[-1:][assistant.ml_model.training_history['feature_names']]
-        
-        # Make prediction
-        prediction = assistant.ml_model.predict(latest_features)
-        
-        # Extract results
-        direction = prediction['classification'][0]
-        confidence = prediction['confidence'][0]
-        price_change_pred = prediction['regression'][0]
-        
-        # FORCE a decision - lower confidence threshold
-        if confidence < 0.4:
-            # Force decision based on technical indicators
-            latest = market_data.iloc[-1]
-            
-            if latest['rsi'] < 35:  # Oversold
-                signal = "BUY"
-                reasoning = f"Forced BUY: RSI at {latest['rsi']:.1f} indicates oversold conditions"
-                direction = 2
-            elif latest['rsi'] > 65:  # Overbought
-                signal = "SELL"
-                reasoning = f"Forced SELL: RSI at {latest['rsi']:.1f} indicates overbought conditions"
-                direction = 0
-            else:
-                # Use MACD to decide
-                if latest['macd'] > latest.get('macd_signal', 0):
-                    signal = "BUY"
-                    reasoning = "Forced BUY: MACD showing bullish momentum"
-                    direction = 2
-                else:
-                    signal = "SELL"
-                    reasoning = "Forced SELL: MACD showing bearish momentum"
-                    direction = 0
-        else:
-            # Normal signal generation
-            if direction == 2:
-                signal = "BUY"
-                reasoning = "AI model predicts upward price movement"
-            elif direction == 0:
-                signal = "SELL"
-                reasoning = "AI model predicts downward price movement"
-            else:
-                # Force decision based on regression
-                if price_change_pred > 0:
-                    signal = "BUY"
-                    reasoning = "Forced BUY: Regression model predicts positive movement"
-                    direction = 2
-                else:
-                    signal = "SELL"
-                    reasoning = "Forced SELL: Regression model predicts negative movement"
-                    direction = 0
-        
-        # Calculate risk levels based on regression prediction
-        current_price = market_info['current_price']
-        
-        # Use regression prediction for Target Price
-        target_price = current_price * (1 + price_change_pred)
-        
-        # Use a 2:1 Reward/Risk ratio for Stop Loss
-        reward = abs(target_price - current_price)
-        risk = reward / 2
-        
-        if signal == "BUY":
-            stop_loss = current_price - risk
-        else: # SELL
-            stop_loss = current_price + risk
-        
-        # Display results
-        print(f"\n AGGRESSIVE TRADING SIGNAL:")
-        print(f" Symbol: BTCUSDT")
-        print(f" Signal: {signal}")
-        print(f" Confidence: {confidence:.1%}")
-        print(f" Current Price: ${current_price:,.2f}")
-        print(f" Target Price: ${target_price:,.2f}")
-        print(f" Stop Loss: ${stop_loss:,.2f}")
-        print(f" Reasoning: {reasoning}")
-        print(f" Regression Pred: {price_change_pred:.2%}")
-        
         print(f"\n Market Context:")
         print(f"   24h Change: {market_info['price_change_24h']:.2f}%")
         print(f"   Volume: {market_info['volume_24h']:,.0f}")
         print(f"   RSI: {market_data['rsi'].iloc[-1]:.1f}")
         print(f"   MACD: {market_data['macd'].iloc[-1]:.4f}")
-        
+
     except Exception as e:
         print(f" Error: {e}")
 
@@ -238,7 +125,6 @@ def backtest_model():
         sentiment_data = {
             'combined_sentiment_score': 0.0,
             'cryptopanic': {'sentiment_score': 0.0},
-            'twitter': {'engagement_sentiment': 0.0},
             'fear_greed': {'value': 50}
         }
         
@@ -426,7 +312,7 @@ def continuous_monitoring():
     try:
         while True:
             print(f"\n {time.strftime('%Y-%m-%d %H:%M:%S')}")
-            generate_conservative_signal()
+            generate_trading_signal()
             print("\n" + "-" * 50)
             time.sleep(300)  # Wait 5 minutes
     except KeyboardInterrupt:
@@ -436,29 +322,27 @@ def main():
     """Main function"""
     print(" Welcome to Crypto AI Trading Assistant!")
     print("This is your ONE main system for everything!")
-    
+
     while True:
         main_menu()
-        choice = input("\nChoose an option (1-7): ").strip()
-        
+        choice = input("\nChoose an option (1-6): ").strip()
+
         if choice == '1':
-            generate_conservative_signal()
+            generate_trading_signal()
         elif choice == '2':
-            generate_aggressive_signal()
-        elif choice == '3':
             retrain_model()
-        elif choice == '4':
+        elif choice == '3':
             show_market_analysis()
-        elif choice == '5':
+        elif choice == '4':
             backtest_model()
-        elif choice == '6':
+        elif choice == '5':
             continuous_monitoring()
-        elif choice == '7':
+        elif choice == '6':
             print(" Goodbye!")
             break
         else:
-            print(" Invalid choice. Please choose 1-7.")
-        
+            print(" Invalid choice. Please choose 1-6.")
+
         input("\nPress Enter to continue...")
 
 if __name__ == "__main__":

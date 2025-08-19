@@ -217,7 +217,24 @@ class CryptoTradingAssistant:
             features = self.prepare_features(market_data, sentiment_data)
             
             # Get latest features for prediction
-            latest_features = features.iloc[-1:][self.ml_model.training_history['feature_names']]
+            expected_features = self.ml_model.training_history['feature_names']
+            missing_features = set(expected_features) - set(features.columns)
+            
+            # Handle missing features by filling with default values
+            if missing_features:
+                logger.warning(f"Missing features detected: {missing_features}. Filling with default values.")
+                for feature in missing_features:
+                    if 'twitter' in feature:
+                        # Default Twitter sentiment values
+                        features[feature] = 0.0
+                    elif 'sentiment' in feature:
+                        # Default sentiment values
+                        features[feature] = 0.0
+                    else:
+                        # Default value for other features
+                        features[feature] = 0.0
+            
+            latest_features = features.iloc[-1:][expected_features]
             
             # Make prediction
             prediction = self.ml_model.predict(latest_features)
@@ -399,12 +416,12 @@ class CryptoTradingAssistant:
                     'high_24h': f"${market_info['high_24h']:,.2f}",
                     'low_24h': f"${market_info['low_24h']:,.2f}"
                 },
-                'sentiment_summary': {
-                    'overall': sentiment_data['overall_sentiment'],
-                    'score': f"{sentiment_data['combined_sentiment_score']:.3f}",
-                    'news_count': sentiment_data['cryptopanic']['total_news'],
-                    'twitter_engagement': sentiment_data['twitter']['avg_engagement']
-                },
+                            'sentiment_summary': {
+                'overall': sentiment_data['overall_sentiment'],
+                'score': f"{sentiment_data['combined_sentiment_score']:.3f}",
+                'news_count': sentiment_data['cryptopanic']['total_news'],
+                'fear_greed_value': sentiment_data['fear_greed']['value']
+            },
                 'technical_summary': self._get_key_indicators(market_data.iloc[-1])
             }
             

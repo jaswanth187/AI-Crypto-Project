@@ -13,8 +13,10 @@ class Config:
     # CryptoPanic API
     CRYPTOPANIC_API_KEY = os.getenv('CRYPTOPANIC_API_KEY')
     
-    # Twitter API (Optional - can use snscrape as fallback)
-    TWITTER_BEARER_TOKEN = os.getenv('TWITTER_BEARER_TOKEN')
+    # Fear & Greed Index API (Free - no API key required)
+    # Uses: https://api.alternative.me/fng/
+    
+    # Twitter API removed - using only CryptoPanic and Fear & Greed Index
     
     # Model Configuration
     MODEL_TYPE = os.getenv('MODEL_TYPE', 'xgboost')  # xgboost, lightgbm, lstm
@@ -34,7 +36,7 @@ class Config:
     ]
     
     # Sentiment Analysis
-    SENTIMENT_LOOKBACK_HOURS = int(os.getenv('SENTIMENT_LOOKBACK_HOURS', '24'))
+    SENTIMENT_LOOKBACK_HOURS = int(os.getenv('SENTIMENT_LOOKBACK_HOURS', '72'))  # Increased to 72 hours
     
     # File Paths
     DATA_DIR = 'data'

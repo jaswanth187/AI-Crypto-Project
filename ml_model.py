@@ -302,8 +302,20 @@ class CryptoMLModel:
             # Ensure features match training data
             expected_features = self.training_history['feature_names']
             missing_features = set(expected_features) - set(features_df.columns)
+            
+            # Handle missing features by filling with default values
             if missing_features:
-                raise ValueError(f"Missing features: {missing_features}")
+                logger.warning(f"Missing features detected: {missing_features}. Filling with default values.")
+                for feature in missing_features:
+                    if 'twitter' in feature:
+                        # Default Twitter sentiment values
+                        features_df[feature] = 0.0
+                    elif 'sentiment' in feature:
+                        # Default sentiment values
+                        features_df[feature] = 0.0
+                    else:
+                        # Default value for other features
+                        features_df[feature] = 0.0
             
             # Select only the expected features in the correct order
             X = features_df[expected_features]

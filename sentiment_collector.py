@@ -3,17 +3,17 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import time
-import snscrape.modules.twitter as sntwitter
 from loguru import logger
 from config import Config
+from transformers import pipeline
 
 class SentimentCollector:
     def __init__(self):
         """Initialize sentiment data collectors"""
         self.cryptopanic_api_key = Config.CRYPTOPANIC_API_KEY
-        self.twitter_bearer_token = Config.TWITTER_BEARER_TOKEN
-        
-    def get_cryptopanic_sentiment(self, symbol='BTC', hours_back=24):
+        self.sentiment_pipeline = pipeline("sentiment-analysis", model="curiousily/tiny-crypto-sentiment-analysis")
+
+    def get_cryptopanic_sentiment(self, symbol='BTC', hours_back=72):  # Increased to 72 hours
         """
         Fetch sentiment data from CryptoPanic API
         
@@ -38,7 +38,8 @@ class SentimentCollector:
                 'auth_token': self.cryptopanic_api_key,
                 'currencies': symbol,
                 'public': 'true',
-                'filter': 'hot'
+                'filter': 'hot',
+                'kind': 'news'
             }
             
             response = requests.get(url, params=params, timeout=10)
@@ -55,11 +56,15 @@ class SentimentCollector:
             for item in data['results']:
                 # Check if news is within our time range
                 published_at = datetime.fromisoformat(item['published_at'].replace('Z', '+00:00'))
-                if published_at >= start_time:
+                # Make start_time timezone-aware for comparison
+                start_time_aware = start_time.replace(tzinfo=published_at.tzinfo)
+                if published_at >= start_time_aware:
+                    sentiment_result = self.sentiment_pipeline(item['title'])
+                    sentiment = sentiment_result[0]['label']
                     news_items.append({
                         'title': item['title'],
                         'published_at': published_at,
-                        'sentiment': item.get('sentiment', 'neutral'),
+                        'sentiment': sentiment,
                         'votes': item.get('votes', {}).get('positive', 0) - item.get('votes', {}).get('negative', 0)
                     })
             
@@ -105,88 +110,40 @@ class SentimentCollector:
             logger.error(f"Error processing CryptoPanic data: {e}")
             return self._default_sentiment_metrics()
     
-    def get_twitter_sentiment(self, query='bitcoin', hours_back=24, max_tweets=100):
-        """
-        Fetch Twitter sentiment using snscrape (no API key required)
-        
-        Args:
-            query (str): Search query
-            hours_back (int): Hours to look back
-            max_tweets (int): Maximum tweets to analyze
-            
-        Returns:
-            dict: Twitter sentiment metrics
-        """
+    def get_fear_greed_index(self):
+        """Get Fear & Greed Index from the real API"""
         try:
-            logger.info(f"Fetching Twitter sentiment for query: {query}")
+            logger.info("Fetching Fear & Greed Index from API")
             
-            # Calculate time range
-            end_time = datetime.now()
-            start_time = end_time - timedelta(hours=hours_back)
+            # Fear & Greed Index API endpoint
+            url = "https://api.alternative.me/fng/"
             
-            # Format query with time filter
-            time_query = f"{query} since:{start_time.strftime('%Y-%m-%d')}"
-            
-            # Collect tweets
-            tweets = []
-            tweet_count = 0
-            
-            for tweet in sntwitter.TwitterSearchScraper(time_query).get_items():
-                if tweet_count >= max_tweets:
-                    break
-                
-                # Check if tweet is within our time range
-                if tweet.date >= start_time:
-                    tweets.append({
-                        'text': tweet.rawContent,
-                        'date': tweet.date,
-                        'likes': tweet.likeCount,
-                        'retweets': tweet.retweetCount,
-                        'replies': tweet.replyCount
-                    })
-                    tweet_count += 1
-                else:
-                    break
-            
-            if not tweets:
-                logger.info("No recent tweets found")
-                return self._default_twitter_metrics()
-            
-            # Simple sentiment analysis based on engagement
-            total_engagement = sum(t['likes'] + t['retweets'] + t['replies'] for t in tweets)
-            avg_engagement = total_engagement / len(tweets)
-            
-            # Calculate engagement-based sentiment (higher engagement = more positive)
-            # This is a simplified approach - in production you'd use a proper sentiment model
-            max_possible_engagement = 1000  # Arbitrary baseline
-            engagement_sentiment = min(avg_engagement / max_possible_engagement, 1.0)
-            
-            metrics = {
-                'tweet_count': len(tweets),
-                'total_engagement': total_engagement,
-                'avg_engagement': avg_engagement,
-                'engagement_sentiment': engagement_sentiment,
-                'sample_tweets': tweets[:3]  # Keep sample for analysis
+            # Parameters for the API request
+            params = {
+                'limit': 1,  # Get the latest value
+                'format': 'json'
             }
             
-            logger.info(f"Processed {len(tweets)} tweets, engagement sentiment: {engagement_sentiment:.3f}")
-            return metrics
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
             
-        except Exception as e:
-            logger.error(f"Error fetching Twitter sentiment: {e}")
-            return self._default_twitter_metrics()
-    
-    def get_fear_greed_index(self):
-        """Get Fear & Greed Index (simulated for now)"""
-        try:
-            # In production, you'd use the actual Fear & Greed Index API
-            # For now, we'll simulate it based on market conditions
-            logger.info("Fetching Fear & Greed Index (simulated)")
+            data = response.json()
             
-            # Simulate fear/greed index (0-100, where 0=extreme fear, 100=extreme greed)
-            # In reality, this would come from an API
-            fear_greed_value = np.random.randint(20, 80)  # Random for demo
+            if 'data' not in data or not data['data']:
+                logger.warning("No data found in Fear & Greed Index response")
+                return self._default_fear_greed_metrics()
             
+            # Extract the latest fear & greed data
+            latest_data = data['data'][0]
+            
+            # Parse the fear & greed value
+            fear_greed_value = int(latest_data['value'])
+            timestamp_str = latest_data['timestamp']
+            
+            # Convert timestamp to datetime
+            timestamp = datetime.fromtimestamp(int(timestamp_str))
+            
+            # Determine sentiment based on value
             if fear_greed_value < 25:
                 sentiment = "Extreme Fear"
             elif fear_greed_value < 45:
@@ -198,19 +155,35 @@ class SentimentCollector:
             else:
                 sentiment = "Extreme Greed"
             
-            return {
+            result = {
                 'value': fear_greed_value,
                 'sentiment': sentiment,
-                'timestamp': datetime.now()
+                'timestamp': timestamp,
+                'value_classification': latest_data.get('value_classification', sentiment)
             }
             
+            logger.info(f"Fear & Greed Index: {fear_greed_value} ({sentiment})")
+            return result
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request error fetching Fear & Greed Index: {e}")
+            return self._default_fear_greed_metrics()
         except Exception as e:
-            logger.error(f"Error getting Fear & Greed Index: {e}")
-            return {'value': 50, 'sentiment': 'Neutral', 'timestamp': datetime.now()}
+            logger.error(f"Error processing Fear & Greed Index data: {e}")
+            return self._default_fear_greed_metrics()
+    
+    def _default_fear_greed_metrics(self):
+        """Default Fear & Greed metrics when API calls fail"""
+        return {
+            'value': 50,
+            'sentiment': 'Neutral',
+            'timestamp': datetime.now(),
+            'value_classification': 'Neutral'
+        }
     
     def get_combined_sentiment(self, symbol='BTC', hours_back=24):
         """
-        Get combined sentiment from all sources
+        Get combined sentiment from CryptoPanic and Fear & Greed Index
         
         Args:
             symbol (str): Cryptocurrency symbol
@@ -224,13 +197,12 @@ class SentimentCollector:
             
             # Get sentiment from different sources
             cryptopanic = self.get_cryptopanic_sentiment(symbol, hours_back)
-            twitter = self.get_twitter_sentiment(f"{symbol.lower()}", hours_back)
+            time.sleep(5) # Add a 5-second delay to avoid rate limiting
             fear_greed = self.get_fear_greed_index()
             
-            # Combine sentiment scores (weighted average)
-            # CryptoPanic: 40%, Twitter: 30%, Fear & Greed: 30%
-            cryptopanic_weight = 0.4
-            twitter_weight = 0.3
+            # Combine sentiment scores (adjusted weights without Twitter)
+            # CryptoPanic: 70%, Fear & Greed: 30%
+            cryptopanic_weight = 0.7
             fear_greed_weight = 0.3
             
             # Normalize Fear & Greed to -1 to 1 scale
@@ -239,7 +211,6 @@ class SentimentCollector:
             # Calculate combined sentiment score
             combined_score = (
                 cryptopanic['sentiment_score'] * cryptopanic_weight +
-                twitter['engagement_sentiment'] * twitter_weight +
                 fear_greed_normalized * fear_greed_weight
             )
             
@@ -255,7 +226,6 @@ class SentimentCollector:
                 'combined_sentiment_score': combined_score,
                 'overall_sentiment': overall_sentiment,
                 'cryptopanic': cryptopanic,
-                'twitter': twitter,
                 'fear_greed': fear_greed,
                 'timestamp': datetime.now()
             }
@@ -279,24 +249,13 @@ class SentimentCollector:
             'news_items': []
         }
     
-    def _default_twitter_metrics(self):
-        """Default Twitter metrics when scraping fails"""
-        return {
-            'tweet_count': 0,
-            'total_engagement': 0,
-            'avg_engagement': 0,
-            'engagement_sentiment': 0.0,
-            'sample_tweets': []
-        }
-    
     def _default_combined_metrics(self):
         """Default combined metrics when collection fails"""
         return {
             'combined_sentiment_score': 0.0,
             'overall_sentiment': 'Neutral',
             'cryptopanic': self._default_sentiment_metrics(),
-            'twitter': self._default_twitter_metrics(),
-            'fear_greed': {'value': 50, 'sentiment': 'Neutral', 'timestamp': datetime.now()},
+            'fear_greed': self._default_fear_greed_metrics(),
             'timestamp': datetime.now()
         }
 
@@ -304,16 +263,6 @@ if __name__ == "__main__":
     # Test the sentiment collector
     try:
         collector = SentimentCollector()
-        
-        # Test CryptoPanic sentiment
-        print("Testing CryptoPanic sentiment...")
-        cryptopanic = collector.get_cryptopanic_sentiment('BTC', 24)
-        print(f"CryptoPanic sentiment score: {cryptopanic['sentiment_score']:.3f}")
-        
-        # Test Twitter sentiment
-        print("\nTesting Twitter sentiment...")
-        twitter = collector.get_twitter_sentiment('bitcoin', 24, 50)
-        print(f"Twitter engagement sentiment: {twitter['engagement_sentiment']:.3f}")
         
         # Test combined sentiment
         print("\nTesting combined sentiment...")

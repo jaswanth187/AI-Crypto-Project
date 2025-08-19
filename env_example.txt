@@ -6,8 +6,10 @@ BINANCE_TESTNET=True
 # CryptoPanic API (Optional - for news sentiment)
 CRYPTOPANIC_API_KEY=your_cryptopanic_api_key_here
 
-# Twitter API (Optional - for social sentiment)
-TWITTER_BEARER_TOKEN=your_twitter_bearer_token_here
+# Fear & Greed Index API (Free - no API key required)
+# Uses: https://api.alternative.me/fng/
+
+# Twitter API removed - using only CryptoPanic and Fear & Greed Index
 
 # Model Configuration
 MODEL_TYPE=xgboost
@@ -20,4 +22,4 @@ TIMEFRAME=1h
 LOOKBACK_PERIOD=1000
 
 # Sentiment Analysis
-SENTIMENT_LOOKBACK_HOURS=24
+SENTIMENT_LOOKBACK_HOURS=72

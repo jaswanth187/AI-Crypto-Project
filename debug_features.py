@@ -31,7 +31,6 @@ def debug_features():
         sentiment_data = {
             'combined_sentiment_score': 0.0,
             'cryptopanic': {'sentiment_score': 0.0},
-            'twitter': {'engagement_sentiment': 0.0},
             'fear_greed': {'value': 50}
         }
         
